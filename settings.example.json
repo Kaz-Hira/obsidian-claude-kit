@@ -1,0 +1,62 @@
+{
+  "_comment": "install.sh がこの内容を ~/.claude/settings.json へマージする。手で入れる場合は hooks と permissions.allow を既存の設定に足すこと。CLAUDE_DIR は既定 ~/.claude。",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/git-guard.sh", "timeout": 10 }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-folder-guard.sh", "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-lint-posttool.sh", "timeout": 10 },
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-suggest-links-newfile.sh", "timeout": 20 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-stop.sh", "timeout": 10 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-hot-cache.sh", "timeout": 10 },
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-weekly-lazy.sh", "timeout": 10 },
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-rss-lazy.sh", "timeout": 10 },
+          { "type": "command", "command": "{{CLAUDE_DIR}}/hooks/vault-dashboard.sh", "timeout": 15 }
+        ]
+      }
+    ]
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(python3 {{CLAUDE_DIR}}/scripts/vault-lint.py:*)",
+      "Bash(python3 {{CLAUDE_DIR}}/scripts/vault-status.py:*)",
+      "Bash(python3 {{CLAUDE_DIR}}/scripts/vault-weekly.py:*)",
+      "Bash(python3 {{CLAUDE_DIR}}/scripts/vault-moc-audit.py:*)",
+      "Bash({{CLAUDE_DIR}}/scripts/vault-bg-run.sh:*)",
+      "Bash({{CLAUDE_DIR}}/scripts/vault-voice.sh:*)"
+    ]
+  },
+
+  "env": {
+    "VAULT": "{{VAULT}}"
+  }
+}

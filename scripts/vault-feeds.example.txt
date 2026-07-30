@@ -1,0 +1,21 @@
+# vault-rss.py が読む RSS/Atom フィード。1行1URL。# はコメント。
+#
+# `[セクション名:件数]` で章分けする。ダイジェストも同じ章立てで出る。
+# 件数はそのセクションで拾う上限(省略時4)。総数の上限はスクリプト側の MAX_TOTAL。
+# セクション名はそのまま `## 見出し` になるので、絵文字を入れてよい。
+# 疎通確認は `python3 ~/.claude/scripts/vault-rss.py --feeds`。
+#
+# これは雛形。自分の購読先に書き換えて使うこと。
+
+[🤖 AI / LLM:5]
+https://www.anthropic.com/rss.xml
+https://openai.com/news/rss.xml
+https://simonwillison.net/atom/everything/
+https://huggingface.co/blog/feed.xml
+
+[🛠 開発:4]
+https://github.blog/feed/
+https://blog.rust-lang.org/feed.xml
+
+[📓 Obsidian / PKM:3]
+https://obsidian.md/feed.xml

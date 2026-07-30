@@ -1,0 +1,33 @@
+{
+  "skill_name": "vault-automation",
+  "evals": [
+    {
+      "id": 0,
+      "name": "new-sessionstart-hook",
+      "prompt": "Vault の attachments/ に未参照の画像が溜まってきた。セッション開始時に、未参照の添付が10件を超えていたら教えてほしい。フックを作って。",
+      "expected_output": "SessionStart フックが lib/vault-common.sh を source して vault_scope_check で Vault 外を弾き、nudge_should_emit で抑制し、閾値未満なら無出力で exit 0 する。settings.json の allowlist 追加にも触れる。",
+      "files": [],
+      "assertions": [
+        "lib/vault-common.sh を source して vault_scope_check を使っている(cwd 判定を自前で再実装していない)",
+        "lib/vault-nudge.sh の nudge_should_emit を通しており、毎セッション無条件に鳴らない",
+        "閾値を超えないときは無出力で exit 0 する(additionalContext を出さない)",
+        "python を呼ぶなら vault_python を使い、/usr/bin/python3 を絶対パスで直書きしていない",
+        "settings.json への登録と permissions.allow への追加に言及している",
+        "Vault 外では何もしないことを検証する手順を示している"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "fix-broken-job",
+      "prompt": "SessionStart で走らせてる自作のバックアップスクリプトが、たまに失敗してるっぽいんだけど気づけない。ログ見ると失敗してる日があるのに、その後もスタンプだけ進んでて再実行されない。どう直すべき?",
+      "expected_output": "スタンプが排他ロックと成功時刻を兼ねているのが原因だと特定し、vault_bg_run(lock/stamp/failures.jsonl の3分割)に載せ替える。サーキットブレーカとダッシュボードでの可視化にも触れる。",
+      "files": [],
+      "assertions": [
+        "1つのスタンプが排他ロックと最終成功時刻を兼ねているのが原因だと説明している",
+        "vault_bg_run を使う(または成功時のみスタンプを進める形に直す)ことを提案している",
+        "失敗を .vault-failures.jsonl に記録して可視化することに触れている",
+        "検証は実際に失敗させてスタンプが進まないことを確かめる、と示している"
+      ]
+    }
+  ]
+}
