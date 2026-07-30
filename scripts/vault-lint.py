@@ -29,7 +29,9 @@ def _envpath(var: str, default: str) -> Path:
 VAULT = _envpath("VAULT", "~/Documents/Obsidian_Vault")
 
 # 走査対象から外すディレクトリ
-SKIP_DIRS = {".obsidian", ".trash", ".grok", "template"}
+# .claude は Claude Code の作業領域。worktree(.claude/worktrees/)には Vault の
+# 複製が丸ごと入るので、外さないと同じノートを二重に指摘し、実数も膨らむ。
+SKIP_DIRS = {".obsidian", ".trash", ".grok", ".claude", "template"}
 
 # 孤立チェックの対象外。日記は連番で辿るもの、Inbox は未整理の置き場、
 # Memo は走り書き(恒久的な資料は Reference/ にあり、そちらは孤立を許さない)

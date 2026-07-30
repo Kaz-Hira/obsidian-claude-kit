@@ -42,7 +42,7 @@ def collect_tags() -> list[str]:
     tags = set()
     pat = re.compile(r"^\s*-\s*(study|memo|blog|ref|sys)/(\S+?)\s*$")
     for p in VAULT.rglob("*.md"):
-        if p.relative_to(VAULT).parts[0] in {".trash", "template"}:
+        if p.relative_to(VAULT).parts[0] in {".trash", ".obsidian", ".claude", "template"}:
             continue
         try:
             head = p.read_text(encoding="utf-8", errors="replace")[:800]

@@ -46,7 +46,7 @@ DB_PATH = _envpath("CLAUDE_DIR", "~/.claude") / "vault-search/vault.db"
 OLLAMA_URL = "http://localhost:11434/api/embed"
 EMBED_MODEL = "embeddinggemma"
 
-SKIP_DIRS = {".obsidian", ".trash", "template", "attachments"}
+SKIP_DIRS = {".obsidian", ".trash", ".grok", ".claude", "template", "attachments"}
 ORPHAN_EXEMPT_DIRS = {"daily", "Inbox", "Memo"}
 LINK_RE = re.compile(r"(!?)\[\[([^\]\|#^]+)(?:[#^][^\]\|]*)?(?:\|[^\]]*)?\]\]")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")

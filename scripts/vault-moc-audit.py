@@ -26,7 +26,7 @@ def _envpath(var: str, default: str) -> Path:
 
 
 VAULT = _envpath("VAULT", "~/Documents/Obsidian_Vault")
-SKIP_DIRS = {".obsidian", ".trash", ".grok", "template"}
+SKIP_DIRS = {".obsidian", ".trash", ".grok", ".claude", "template"}
 
 # 専用MOCを持つフォルダのみ対象。Memo/Blog は MOC.md 自身の Dataview
 # クエリ(「まだどのMOCにも繋がっていないノート」)で既にカバーされている

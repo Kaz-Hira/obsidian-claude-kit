@@ -36,7 +36,7 @@ DB_PATH = Path(__file__).parent / "vault.db"
 OLLAMA_URL = "http://localhost:11434/api/embed"
 EMBED_MODEL = "embeddinggemma"
 EMBED_DIM = 768
-EXCLUDE_DIRS = {".trash", ".obsidian", ".grok", "template", "attachments"}
+EXCLUDE_DIRS = {".trash", ".obsidian", ".grok", ".claude", "template", "attachments"}
 CHUNK_MAX = 1200  # embeddinggemma のコンテキスト(2048tok)に日本語で安全に収まる長さ
 MIN_CHUNK = 30
 
