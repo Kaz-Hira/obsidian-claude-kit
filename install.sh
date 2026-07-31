@@ -66,7 +66,10 @@ subst() {
 }
 
 install_one() {
-  local src="$1" rel="$2" dst="$CLAUDE_DIR/$rel"
+  # local は全引数を展開してから代入するので、同じ行で $rel を参照すると
+  # 外側の変数を拾ってしまう(shellcheck SC2318)。dst は必ず別の local にする。
+  local src="$1" rel="$2"
+  local dst="$CLAUDE_DIR/$rel"
 
   if [ "$DRY_RUN" = 1 ]; then
     if [ -e "$dst" ]; then info "上書き(退避あり) $rel"; else info "新規          $rel"; fi
@@ -81,7 +84,13 @@ install_one() {
   mkdir -p "$(dirname "$dst")"
   # symlink 先を書き換えて元(dotfiles 等)を汚さないよう、必ず消してから作る
   rm -f "$dst"
-  subst < "$src" > "$dst"
+  # テキストだけ置換する。画像などバイナリを同梱したスキルが来ても、
+  # sed が "illegal byte sequence" で止まって導入全体を巻き添えにしないように。
+  if subst < "$src" > "$dst" 2>/dev/null; then
+    :
+  else
+    cp "$src" "$dst"
+  fi
   [ -x "$src" ] && chmod 755 "$dst" || true
 }
 
@@ -96,8 +105,9 @@ while IFS= read -r src; do
   install_one "$src" "$rel"
   COUNT=$((COUNT + 1))
 done < <(find "$REPO" \
-  \( -path "$REPO/.git" -o -path "$REPO/tools" -o -path "$REPO/docs" \) -prune -o \
-  -type f -print | sort)
+  \( -path "$REPO/.git" -o -path "$REPO/tools" -o -path "$REPO/docs" \
+     -o -path "$REPO/.github" -o -name "__pycache__" \) -prune -o \
+  -type f ! -name "*.pyc" ! -name ".DS_Store" -print | sort)
 
 info "$COUNT ファイル"
 [ "$DRY_RUN" = 1 ] || [ ! -d "$BACKUP" ] || info "退避先: $BACKUP"

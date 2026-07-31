@@ -1,0 +1,70 @@
+name: 不具合の報告
+description: フックやスクリプトが動かない・意図しない動きをする
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        フック関係は、下の「状態ファイル」があると原因がほぼ一発で分かります。
+        面倒であれば埋められる範囲で構いません。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 何が起きたか
+      description: 期待した動きと、実際の動きを書いてください
+      placeholder: |
+        /triage を叩いたが Inbox のノートが1件も出てこない。
+        Inbox/ には3件ある。
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. Vault のディレクトリで claude を起動する
+        2. /triage を実行する
+        3. 「対象なし」と表示される
+    validations:
+      required: true
+
+  - type: textarea
+    id: state
+    attributes:
+      label: 状態ファイル
+      description: |
+        次の出力を貼ってください。個人のノート名が含まれる場合は伏せて構いません。
+      value: |
+        <details><summary>vault-status.py</summary>
+
+        ```
+        $ python3 ~/.claude/scripts/vault-status.py
+        (ここに貼る)
+        ```
+        </details>
+
+        <details><summary>失敗したジョブ(あれば)</summary>
+
+        ```
+        $ cat ~/.claude/scripts/.vault-failures.jsonl
+        (ここに貼る)
+        ```
+        </details>
+
+  - type: input
+    id: env
+    attributes:
+      label: 環境
+      placeholder: "macOS 15.6 (Apple Silicon) / Python 3.12.4 / Claude Code 2.x"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: 確認したこと
+      options:
+        - label: Vault のルートに `CLAUDE.md` を置いている(無いと置き場所を判断できません)
+        - label: Vault のディレクトリの中で `claude` を起動している(外だとフックは黙ります)

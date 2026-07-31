@@ -1,5 +1,9 @@
 # obsidian-claude-kit
 
+[![verify](https://github.com/Kaz-Hira/obsidian-claude-kit/actions/workflows/verify.yml/badge.svg)](https://github.com/Kaz-Hira/obsidian-claude-kit/actions/workflows/verify.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
+
 **Obsidian Vault を Claude Code で運用するための、実際に毎日動いている一式。**
 スラッシュコマンド11 / フック9 / スキル8 / サブエージェント5 / スクリプト11。
 
@@ -70,7 +74,7 @@ Inbox は永久に空にならない。足りないのはノートを作る道�
 ## 導入
 
 ```bash
-git clone https://github.com/<you>/obsidian-claude-kit.git
+git clone https://github.com/Kaz-Hira/obsidian-claude-kit.git
 cd obsidian-claude-kit
 ./install.sh --vault ~/Documents/YourVault --dry-run   # まず何が起きるか見る
 ./install.sh --vault ~/Documents/YourVault
@@ -78,6 +82,13 @@ cd obsidian-claude-kit
 
 `install.sh` は既存ファイルを `~/.claude/backups/kit-<日時>/` に退避してから置き、
 `settings.json` は既存のキーを残したままマージします。
+
+**元に戻すには**、退避先から書き戻してください。`install.sh` は入れたファイルの一覧を
+持たないので、削除ではなく復元で戻す設計です。
+
+```bash
+cp -R ~/.claude/backups/kit-<日時>/. ~/.claude/
+```
 
 導入後、Vault 側に `CLAUDE.md`(フォルダ構成とタグ規約)を置いてください。
 雛形と考え方は [`docs/vault-conventions.md`](docs/vault-conventions.md) にあります。
@@ -95,6 +106,9 @@ cd obsidian-claude-kit
 | mlx-whisper | △ | `voice` スキル |
 
 △ は該当機能を使うときだけ。無くても他は動きます。
+
+**動作確認環境** — macOS 15.6 (Apple Silicon, M4) / Python 3.12 と 3.14 / Claude Code 2.x。
+Vault はノート約180本、フックは日常的に稼働しています。Intel Mac と Linux は未確認です。
 
 ## 設計上の判断
 
@@ -122,6 +136,12 @@ cwd が Vault 配下でなければ即座に exit 0 します(symlink 経由で�
 - **汎用ではありません。** 特定の運用(フォルダ=種類、直交タグ、Zettelkasten 寄りの uid)を前提にしています。合わなければ `docs/vault-conventions.md` から自分用に組み替えてください
 - **macOS 専用です。** Linux 対応の PR は歓迎します
 
+## 貢献
+
+このリポジトリは生成物なので、PR を出す場所に少し癖があります。
+[CONTRIBUTING.md](CONTRIBUTING.md) を先に読んでください。
+変更履歴は [CHANGELOG.md](CHANGELOG.md) にあります。
+
 ## ライセンス
 
-MIT
+MIT — 詳細は [LICENSE](LICENSE)。

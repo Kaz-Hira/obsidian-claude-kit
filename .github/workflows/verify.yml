@@ -1,0 +1,67 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 個人の絶対パスや鍵が混ざったまま公開されるのを機械で止める。
+      # 同期元(~/dotfiles/.claude)は CI には無いので、ここでは生成物だけを検査する。
+      # 各パターンが「後ろに続く文字」まで要求しているのは、この検査コマンド自身と
+      # CONTRIBUTING.md に書かれた検査手順が自己ヒットするのを避けるため。
+      # 実際の漏洩は /Users/<名前> のように必ず続きがあり、説明文中の '/Users/|' は無い。
+      - name: 個人情報の混入を検査する
+        run: |
+          if grep -rniE '/Users/[A-Za-z0-9]|@gmail\.com|ghp_[A-Za-z0-9]|gho_[A-Za-z0-9]|sk-[A-Za-z0-9]{15}' \
+               --exclude-dir=.git . ; then
+            echo "::error::個人パスまたは鍵らしき文字列が混入している"
+            exit 1
+          fi
+          echo "混入なし"
+
+      # 構文チェックだけでは足りない(PEP 604 の型注釈は py_compile を通って
+      # def 実行時に落ちる)。それでも壊れた状態でのマージは防げる。
+      - name: Python を構文チェックする
+        run: |
+          find . -name '*.py' -not -path './.git/*' -print0 \
+            | xargs -0 -n1 python -m py_compile
+          echo "py_compile 通過"
+
+      - name: シェルスクリプトを構文チェックする
+        run: |
+          find . -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 -n1 bash -n
+          echo "bash -n 通過"
+
+      - name: shellcheck をかける
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # SC1090/SC1091: source 先が実行時にしか決まらないため追えない(意図通り)
+          find . -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 shellcheck -e SC1090,SC1091 -S warning
+
+      - name: JSON が壊れていないか確かめる
+        run: |
+          for f in $(find . -name '*.json' -not -path './.git/*'); do
+            python -c "import json,sys; json.load(open(sys.argv[1]))" "$f" || exit 1
+          done
+          echo "JSON 通過"
+
+      - name: install.sh が前提の不足を検出できるか確かめる
+        run: |
+          # --vault 無しでは必ず落ちること(黙って中途半端に入るのが最悪)
+          if bash install.sh 2>/dev/null; then
+            echo "::error::--vault 無しでも成功してしまった"
+            exit 1
+          fi
+          echo "前提チェック通過"

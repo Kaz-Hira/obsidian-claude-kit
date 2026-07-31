@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 使い方の質問・運用の相談
+    url: https://github.com/Kaz-Hira/obsidian-claude-kit/discussions
+    about: 「自分の Vault 構成に合わせるには」等はこちらへ
