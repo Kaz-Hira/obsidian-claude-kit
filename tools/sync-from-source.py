@@ -48,7 +48,7 @@ MANIFEST: dict[str, list[str]] = {
     "commands": [
         "anki.md", "daily.md", "dispatch.md", "hot.md", "lint.md",
         "research.md", "save.md", "suggest-links.md", "triage.md",
-        "vsearch.md", "weekly-review.md",
+        "weekly-review.md",
     ],
     "hooks": [
         "git-guard.sh", "vault-dashboard.sh", "vault-folder-guard.sh",
@@ -60,7 +60,7 @@ MANIFEST: dict[str, list[str]] = {
         "vault-anki.py", "vault-autotag.py", "vault-bg-run.sh",
         "vault-hot-auto.py", "vault-lint.py", "vault-moc-audit.py",
         "vault-rss.py", "vault-status.py", "vault-suggest-links.py",
-        "vault-voice.sh", "vault-weekly.py",
+        "vault-voice.sh", "vault-weekly.py", "vault-zenn-sync.py",
     ],
     "agents": [
         "code-reviewer.md", "fact-checker.md", "note-synthesizer.md",
@@ -72,7 +72,7 @@ MANIFEST: dict[str, list[str]] = {
 # ディレクトリごと持っていくスキル
 SKILLS = [
     "defuddle", "diagnosing-bugs", "moc-audit", "obsidian-bases",
-    "obsidian-blog", "obsidian-cli", "vault-automation", "voice",
+    "obsidian-blog", "obsidian-cli", "vault-automation", "voice", "vsearch",
 ]
 SKILL_EXCLUDE = {".DS_Store", "__pycache__"}
 

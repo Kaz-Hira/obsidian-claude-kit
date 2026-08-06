@@ -113,6 +113,9 @@ vault_bg_run() {
       fi
     else
       rc=$?
+      # shellcheck disable=SC1003
+      # tr -d '"\\' は「" と \ を消す」指定。直後の printf で JSON に埋めるため、
+      # 引用符とバックスラッシュを先に落とす必要がある(単一引用符の脱出ではない)。
       tail_line=$(tail -n 1 "$log" 2>/dev/null | tr -d '"\\' | tr '\n' ' ' | cut -c1-200)
       printf '{"ts":"%s","job":"%s","rc":%s,"tail":"%s"}\n' \
         "$(date +%FT%T)" "$job" "$rc" "$tail_line" >> "$faillog"

@@ -14,15 +14,16 @@ launchd は TCC で ~/Documents に触れないため使わない。
 """
 
 from __future__ import annotations  # 3.9 の /usr/bin/python3 で実行されても
+
 # `X | None` 等の PEP 604 が def 実行時に評価されないようにする(2026-07-26)。
 # これが無いと py_compile は通るのに実行時 TypeError で即死する。
-
 import argparse
 import datetime as dt
 import importlib.util
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 import os
 
@@ -39,22 +40,32 @@ SEARCH = _envpath("CLAUDE_DIR", "~/.claude") / "vault-search/vault_search.py"
 SUGGEST = SCRIPTS / "vault-suggest-links.py"
 AUTOTAG = SCRIPTS / "vault-autotag.py"
 MOC_AUDIT = SCRIPTS / "vault-moc-audit.py"
+LIFECYCLE = SCRIPTS / "vault-lifecycle.py"
+STUDY_STATUS = SCRIPTS / "vault-study-status.py"
 UV = "/opt/homebrew/bin/uv"
 CCUSAGE = "/opt/homebrew/bin/ccusage"
 INBOX_STALE_DAYS = 7
 KANBAN_STALE_DAYS = 14   # 下書き/推敲がこの日数動かなければ「詰まり」として出す
+LIFECYCLE_PICK = 2       # 要更新・淘汰候補から毎週差し出す件数(総量でなく順番待ち)
 AI_LIMIT = 8            # 接続提案・タグ提案の対象上限(gpt-oss は遅いので抑える)
 START = "<!-- vault-weekly:start -->"
 END = "<!-- vault-weekly:end -->"
 
 
 def sh(args, **kw) -> str:
-    return subprocess.run(args, capture_output=True, text=True, **kw).stdout.strip()
+    """stdout だけ返す。失敗しても空文字で続行するが、黙って消えないよう stderr に出す。
+
+    ここが空を返すと週次ダイジェストの節が「対象なし」と見分けが付かなくなる。
+    """
+    p = subprocess.run(args, capture_output=True, text=True, check=False, **kw)
+    if p.returncode != 0:
+        print(f"  ! 失敗 rc={p.returncode}: {' '.join(map(str, args))[:100]}", file=sys.stderr)
+    return p.stdout.strip()
 
 
 def run(args) -> tuple[int, str]:
     """(returncode, stdout) を返す。Ollama 停止などの失敗を呼び出し側で判定するため。"""
-    p = subprocess.run(args, capture_output=True, text=True)
+    p = subprocess.run(args, capture_output=True, text=True, check=False)
     return p.returncode, p.stdout.strip()
 
 
@@ -132,9 +143,9 @@ def ai_sections() -> list[str]:
 
     # ④ Inbox 未タグノートへのタグ提案(dry-run。--apply しない=書き込まない)
     _, tag = run(["python3", str(AUTOTAG), "--limit", str(AI_LIMIT)])
-    props = [l for l in tag.splitlines() if l.startswith("[")]
-    out.append(f"- **タグ提案(Inbox 未タグ / 承認は手動 `vault-autotag.py --apply`)**")
-    out += [f"    - {l}" for l in props] if props else ["    - 対象なし"]
+    props = [line for line in tag.splitlines() if line.startswith("[")]
+    out.append("- **タグ提案(Inbox 未タグ / 承認は手動 `vault-autotag.py --apply`)**")
+    out += [f"    - {line}" for line in props] if props else ["    - 対象なし"]
     return out
 
 
@@ -172,8 +183,10 @@ def usage_summary() -> list[str]:
     ratio = (cache_read / total * 100) if total else 0.0
 
     lines = [
-        f"- **トークン使用量(今週)**: {total/1e6:.1f}M tokens / "
-        f"API換算 ${cost:,.0f}(**定額プランなので請求額ではない**)"
+        (
+            f"- **トークン使用量(今週)**: {total/1e6:.1f}M tokens / "
+            f"API換算 ${cost:,.0f}(**定額プランなので請求額ではない**)"
+        )
     ]
 
     prev = by_period.get((monday - dt.timedelta(days=7)).isoformat())
@@ -204,7 +217,8 @@ def moc_section() -> list[str]:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         r = mod.analyze()
-    except Exception:
+    except Exception as e:  # noqa: BLE001 — 週次全体を巻き込まない。ただし黙って節を消さず報告する
+        print(f"  ! MOC 監査に失敗({type(e).__name__}) — この節を飛ばす", file=sys.stderr)
         return []
     n = len(r["uncovered"])
     if n == 0:
@@ -212,6 +226,76 @@ def moc_section() -> list[str]:
     detail = " / ".join(f"{k} {v}" for k, v in sorted(r["by_folder"].items(),
                                                      key=lambda kv: -kv[1]))
     return [f"- **MOC 未収録**: {n} 件({detail})。一覧は `moc-audit` スキル"]
+
+
+def lifecycle_section() -> list[str]:
+    """ノートのライフサイクル(更新・淘汰)の順番待ちを出す。
+
+    ここは**バックログではなく順番待ち**として出す。「古いノート 47 件」のような
+    総量は 0 にならないので警報疲れになる(この Vault は既に一度それで失敗した)。
+    代わりに毎週「次に手を付ける数件」だけを固定数で出す。件数が増えても
+    行数は増えないので、読み飛ばされない。
+
+    健全数も併記する——減点だけ出すダッシュボードは読まれなくなるし、
+    「使われていて期限内」が増えているかがこの仕組みの本来の成績表でもある。
+    """
+    try:
+        spec = importlib.util.spec_from_file_location("vault_lifecycle", LIFECYCLE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        r = mod.analyze()
+    except Exception as e:  # noqa: BLE001 — 週次全体を巻き込まない。ただし黙って節を消さず報告する
+        print(f"  ! ライフサイクル解析に失敗({type(e).__name__}) — この節を飛ばす", file=sys.stderr)
+        return []
+
+    c = r["counts"]
+    out = [(f"- **ライフサイクル**: 健全 {c['healthy']} / 要更新 {c['refresh']} / "
+            f"淘汰候補 {c['retire']}(対象 {c['scope']} ノート)")]
+    for row in r["refresh"][:LIFECYCLE_PICK]:
+        out.append(f"    - 🔧 [[{row['stem']}]] — 期限+{row['overdue_days']}日 / "
+                   f"被リンク{row['inbound']} → `/refresh`")
+    for row in r["retire"][:LIFECYCLE_PICK]:
+        out.append(f"    - 🗑️ [[{row['stem']}]] — {row['age_days']}日 無参照 → `/retire`")
+    return out
+
+
+def study_section() -> list[str]:
+    """今週の想起(思い出した日数)を出す。
+
+    週次には「作った量」の指標(新規ノート・更新ノート)しか無かった。
+    生成だけを測ると生成だけが伸びるので、消費側の指標をここに置く。
+
+    出すのは **7日のうち何日やったか** であって正答率ではない。点数を測ると
+    点数を守る行動(簡単なカードだけ回す)が出るし、そもそも正答率は
+    Anki の出題内容で動くので週ごとに比較できない。学習で唯一まともに
+    比較できるのは「継続したか」なので、それだけを出す。
+
+    総量(未着手 189 枚)は 0 にならないので出さない——ライフサイクル節と
+    同じ理由で、警報疲れを招くだけになる。
+    """
+    if not STUDY_STATUS.is_file():
+        return []
+    try:
+        spec = importlib.util.spec_from_file_location("vault_study_status", STUDY_STATUS)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        r = mod.analyze()
+    except Exception as e:  # noqa: BLE001 — 週次全体を巻き込まない。ただし黙って節を消さず報告する
+        print(f"  ! 想起状況の取得に失敗({type(e).__name__}) — この節を飛ばす", file=sys.stderr)
+        return []
+    if not r.get("available"):
+        return []
+
+    d7 = r["days_studied_7"]
+    due = r["counts"]["due"]
+    out = [f"- **今週の想起**: 7日中 {d7} 日実施 / 期限切れ {due} 枚"]
+    if d7 == 0:
+        out.append("    - 今週は一度も思い出していない → `/drill`(10問・5分)")
+    elif due >= 20:
+        out.append(f"    - 期限切れが {due} 枚たまっている → `/drill 15`")
+    for s in r["struggling"][:LIFECYCLE_PICK]:
+        out.append(f"    - ×{s['lapses']} [{s['deck']}] {s['question'][:36]} ← [[{s['source']}]]")
+    return out
 
 
 def kanban_stalled() -> list[str]:
@@ -275,6 +359,8 @@ def build_block(with_ai: bool = True) -> str:
     lines.append(f"- **Inbox 滞留(≥{INBOX_STALE_DAYS}日)**: {len(stale)} 件")
     lines += [f"    - `Inbox/{f}`" for f in stale[:10]]
     lines += moc_section()
+    lines += lifecycle_section()
+    lines += study_section()
     lines += kanban_stalled()
     # Anki の催促はここに置かない(2026-07-26 に削除)。
     # .apkg は生涯1本しか作られておらず、本人も「不要」と判断している。

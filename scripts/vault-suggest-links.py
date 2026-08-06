@@ -20,9 +20,9 @@ X調査ノートの定石「書いたら既存知識へリンク2〜3本」を�
 """
 
 from __future__ import annotations  # 3.9 の /usr/bin/python3 で実行されても
+
 # `X | None` 等の PEP 604 が def 実行時に評価されないようにする(2026-07-26)。
 # これが無いと py_compile は通るのに実行時 TypeError で即死する。
-
 import argparse
 import json
 import re
@@ -156,7 +156,7 @@ def suggest_for(db: sqlite3.Connection, note: Note) -> list[tuple[str, float]]:
     ).fetchall()
 
     out = []
-    for path, title, dist in rows:
+    for path, _title, dist in rows:
         stem = Path(path).stem
         if path == note.rel or stem in note.links:
             continue  # 自分自身と既にリンク済みは除く

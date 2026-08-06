@@ -5,7 +5,7 @@
 ![platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 
 **Obsidian Vault を Claude Code で運用するための、実際に毎日動いている一式。**
-スラッシュコマンド11 / フック9 / スキル8 / サブエージェント5 / スクリプト11。
+スラッシュコマンド10 / フック9 / スキル9 / サブエージェント5 / スクリプト12。
 
 デモ用に書き起こしたものではなく、個人の Vault(ノート約180本)で回している設定を
 そのまま公開用にサニタイズしたものです。同期は [`tools/sync-from-source.py`](tools/sync-from-source.py) が行い、
@@ -34,6 +34,45 @@ Inbox は永久に空にならない。足りないのはノートを作る道�
 **能動的に叩くコマンドは実質 `/triage` と `/weekly-review` の2つだけ**になります。
 残りはフックが勝手に走ります。
 
+## 動いている様子
+
+`/lint`(= `scripts/vault-lint.py`)を、規約違反をわざと仕込んだ小さな Vault に当てた実際の出力:
+
+```console
+$ VAULT=~/demo-vault python3 scripts/vault-lint.py
+Vault: ~/demo-vault
+ノート 4 件 / 添付 0 件
+重大 2 / 警告 3 / 提案 5
+
+────────────────────────────────────────────────────────────
+重大 (2)
+────────────────────────────────────────────────────────────
+  リンク切れ  Reference/色管理の基礎.md  →  [[ACEScgの選定理由]]
+  タグ契約違反  Study/微分方程式.md  →  #study 系のタグが無く、auto-note-mover が再配置できない
+
+────────────────────────────────────────────────────────────
+警告 (3)
+────────────────────────────────────────────────────────────
+  frontmatter 欠落  Inbox/クリップ.md  →  title, uid, created, updated, tags
+  frontmatter 欠落  Study/微分方程式.md  →  tags
+  ai 規約  MOC/Reference MOC.md  →  MOC は ai: false のはずが ai: 未設定
+
+────────────────────────────────────────────────────────────
+提案 (5)
+────────────────────────────────────────────────────────────
+  孤立  MOC/Reference MOC.md  →  どこからもリンクされていない
+  孤立  Study/微分方程式.md  →  どこからもリンクされていない
+  内容が薄い  MOC/Reference MOC.md  →  本文 18 文字
+  内容が薄い  Reference/色管理の基礎.md  →  本文 31 文字
+```
+
+重大・警告・提案の三段に分かれているのが肝で、**提案は無視してよい**。
+全部を同じ強さで出すと、結局どれも読まれなくなる。
+
+これは `/lint` として手で叩くこともできるが、実際には
+PostToolUse フックがファイル編集の**直後**に自動で走る。
+規約は、破った瞬間に指摘されないと守られない。
+
 ## 入っているもの
 
 ### スラッシュコマンド
@@ -44,7 +83,6 @@ Inbox は永久に空にならない。足りないのはノートを作る道�
 | `/triage` | Inbox を仕分ける(切り出し・タグ付け・破棄に振る) |
 | `/lint` | 健全性を検査する(リンク切れ・孤立ノート・規約違反) |
 | `/weekly-review` | 週次ノートを開き、健全性・統合候補・構造レビュー・Inbox 消費を一括で |
-| `/vsearch` | 意味で検索する(sqlite-vec + embeddinggemma) |
 | `/suggest-links` | 孤立ノートに、意味の近い既存ノートへのリンク候補を出す |
 | `/research` | テーマを Web リサーチし、出典付きで Inbox ノート化する |
 | `/hot` | ホットキャッシュ(`hot.md`)を今のセッションの内容で書き換える |
@@ -69,7 +107,38 @@ Inbox は永久に空にならない。足りないのはノートを作る道�
 ### サブエージェントとスキル
 
 - **agents** — `note-synthesizer`(重複・分散したノートの統合候補)、`vault-structure-reviewer`(配置とタグの妥当性)、`fact-checker`(公開前の裏取り)、`code-reviewer`、`security-reviewer`
-- **skills** — `defuddle`(記事本文だけ抽出してクリップ)、`obsidian-blog`(執筆・推敲)、`voice`(音声をノート化)、`moc-audit`(MOC の抜け漏れ)、`vault-automation`(フックを自作するときの型)ほか
+- **skills** — `vsearch`(意味で検索する。sqlite-vec + embeddinggemma)、`defuddle`(記事本文だけ抽出してクリップ)、`obsidian-blog`(執筆・推敲)、`voice`(音声をノート化)、`moc-audit`(MOC の抜け漏れ)、`vault-automation`(フックを自作するときの型)ほか
+
+### Vault から Zenn へ公開する
+
+`vault-zenn-sync.py` は、Vault の `Blog/` を正本として Zenn の記事を生成する。
+Obsidian 用の frontmatter(`uid` / `created` / `updated` / `tags`)と Zenn 用の設定を
+1枚のノートに同居させ、Zenn が読む項目だけを抜き出して書き出す。
+
+```yaml
+---
+title: 記事タイトル
+uid: "20260805090800"
+tags: [blog/obsidian]
+status: draft
+zenn:                              # このブロックがあるノートだけが対象
+  slug: my-article-slug
+  emoji: "🗂️"
+  type: tech
+  topics: ["obsidian", "claudecode"]
+  published: false
+---
+```
+
+```bash
+VAULT=~/Documents/Obsidian_Vault ZENN=~/dev/zenn-content \
+  python3 scripts/vault-zenn-sync.py --check   # 書かずに差分だけ見る
+```
+
+Zenn に弾かれる前に slug・emoji・type・topics 数を検査し、
+本文先頭の H1 重複を落とし、`[[wikilink]]` が残っていれば警告する
+(Zenn では展開されないため)。`published: true` のノートは
+「push すると公開される」と明示的に警告する。
 
 ## 導入
 

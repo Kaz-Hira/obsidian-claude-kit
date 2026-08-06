@@ -49,9 +49,10 @@ SINCE = "3 days ago"
 
 def sh(args: list[str], cwd: Path) -> str:
     try:
-        r = subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, timeout=15)
+        r = subprocess.run(args, cwd=str(cwd), capture_output=True, text=True, timeout=15, check=False)
         return r.stdout if r.returncode == 0 else ""
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
+        # git が無い/タイムアウト。ここは hot.md の付録なので空で続行する
         return ""
 
 
@@ -92,8 +93,10 @@ def build_block() -> str:
         body = ["- (直近3日のコミットも未コミットの変更もない)"]
     return "\n".join([
         START,
-        f"<!-- vault-hot-auto.py が生成。手で書かない(次回の実行で上書きされる)。"
-        f"最終 {dt.datetime.now():%Y-%m-%d %H:%M} -->",
+        (
+            f"<!-- vault-hot-auto.py が生成。手で書かない(次回の実行で上書きされる)。"
+            f"最終 {dt.datetime.now():%Y-%m-%d %H:%M} -->"
+        ),
         *body,
         END,
     ])
