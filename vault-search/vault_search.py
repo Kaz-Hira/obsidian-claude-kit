@@ -18,7 +18,6 @@ import json
 import re
 import sqlite3
 import struct
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -87,7 +86,7 @@ def chunk_note(body: str) -> list[tuple[str, str]]:
             flush()
             heading = line.lstrip("#").strip()
         buf.append(line)
-        if sum(len(l) for l in buf) > CHUNK_MAX:
+        if sum(len(line) for line in buf) > CHUNK_MAX:
             flush()
     flush()
     return chunks
@@ -153,7 +152,7 @@ def cmd_index(full: bool):
         if chunks:
             docs = [f"title: {title} | text: {c}" for _, c in chunks]
             vecs = embed(docs)
-            for (heading, content), vec in zip(chunks, vecs):
+            for (heading, content), vec in zip(chunks, vecs, strict=True):
                 cur = db.execute(
                     "INSERT INTO chunks (path, title, heading, content) VALUES (?, ?, ?, ?)",
                     (rel, title, heading, content),
@@ -189,7 +188,7 @@ def cmd_search(query: str, k: int):
         (serialize(qvec), k),
     ).fetchall()
 
-    for path, title, heading, content, dist in rows:
+    for path, _title, heading, content, dist in rows:
         loc = f"{path}" + (f" › {heading}" if heading else "")
         snippet = re.sub(r"\s+", " ", content)[:160]
         print(f"[{dist:.3f}] {loc}\n         {snippet}\n")

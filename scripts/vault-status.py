@@ -15,6 +15,7 @@ lint の判定は vault-lint.py の analyze() を importlib で読んで使う�
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import importlib.util
 import json
@@ -56,19 +57,26 @@ def _load_lint():
 
 
 def _git_count(repo: Path) -> int:
+    """未コミット数。取得に失敗したときは 0 を返すが、黙って「変更なし」に化けないよう
+    stderr に1行出す(ダッシュボードの数字が静かに嘘になるのを防ぐ)。
+    """
     try:
-        out = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
-                             capture_output=True, text=True, timeout=10).stdout
-    except Exception:
+        p = subprocess.run(["git", "-C", str(repo), "status", "--porcelain"],
+                           capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"  ! git 実行不可 {repo.name}: {type(e).__name__}", file=sys.stderr)
         return 0
-    return len([ln for ln in out.splitlines() if ln.strip()])
+    if p.returncode != 0:
+        print(f"  ! git status 失敗 {repo.name}: rc={p.returncode}", file=sys.stderr)
+        return 0
+    return len([ln for ln in p.stdout.splitlines() if ln.strip()])
 
 
 def _inbox() -> dict:
     d = VAULT / "Inbox"
     if not d.is_dir():
         return {"total": 0, "rss": 0, "oldest_days": 0}
-    files = [p for p in d.glob("*.md")]
+    files = list(d.glob("*.md"))
     rss = [p for p in files if re.match(r"^\d{8}-RSS$", p.stem)]
     oldest = 0
     if files:
@@ -154,10 +162,38 @@ def _weekly() -> dict:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         y, w = mod.locale_week(dt.date.today())
-    except Exception:
-        return {"iso": "", "exists": True}  # 判定できないときは黙る側に倒す
+    except Exception:  # noqa: BLE001 — 週次ノートの有無は補助表示。判定できないときは警告を出さない側に倒す
+        return {"iso": "", "exists": True}
     name = f"{y}-W{w:02d}"
     return {"iso": name, "exists": (VAULT / "daily" / "weekly" / f"{name}.md").exists()}
+
+
+def _study() -> dict:
+    """Anki の想起状況(期限切れ枚数と、最後に思い出してからの日数)。
+
+    実測 0.12s と、この中では重い部類(collection をコピーしてから読むため)。
+    キャッシュに載せる前提で、ダッシュボードからは直接呼ばない。
+    Anki が入っていない環境では available=False が返るだけで落ちない。
+    """
+    spec = importlib.util.spec_from_file_location(
+        "vault_study_status", SCRIPTS / "vault-study-status.py")
+    try:
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        r = mod.analyze()
+    except Exception:  # noqa: BLE001 — 状態表示の一項目。取れなくても他を巻き込まない
+        return {"available": False}
+    if not r.get("available"):
+        return {"available": False}
+    return {
+        "available": True,
+        "due": r["counts"]["due"],
+        "new": r["counts"]["new"],
+        "total": r["counts"]["total"],
+        "stale_days": r["stale_days"],
+        "days_studied_7": r["days_studied_7"],
+        "last_recall": r["last_recall"],
+    }
 
 
 def build() -> dict:
@@ -178,6 +214,7 @@ def build() -> dict:
         "root_junk": _root_junk(),
         "jobs": _jobs(),
         "triage_days_ago": _triage_days(),
+        "study": _study(),
     }
 
 
@@ -198,10 +235,9 @@ def main() -> int:
             return 0
 
     data = build()
-    try:
+    # キャッシュの書き込み失敗は致命的でない(次回作り直す)ので握り潰す
+    with contextlib.suppress(OSError):
         CACHE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass
     print(json.dumps(data, ensure_ascii=False))
     return 0
 

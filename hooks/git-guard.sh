@@ -15,6 +15,9 @@ emit() {
 
 # --- 破滅的: 無条件で拒否 ---
 # rm -rf / , rm -rf ~ , rm -rf $HOME
+# shellcheck disable=SC2016
+# 単一引用符の中は grep に渡す正規表現。\$HOME は「検査対象のコマンド文字列に
+# 現れるリテラルの $HOME」を指すので、ここで展開させてはいけない。
 if printf '%s' "$cmd" | grep -Eq 'rm[[:space:]]+-[a-zA-Z]*[rf][a-zA-Z]*[[:space:]]+(/|~|\$HOME)([[:space:]]|$)'; then
   emit deny "破滅的な削除 (rm -rf / など) を検知したため拒否しました。必要なら手動で実行してください。"
 fi

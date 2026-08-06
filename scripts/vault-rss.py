@@ -15,9 +15,9 @@
 """
 
 from __future__ import annotations  # 3.9 の /usr/bin/python3 で実行されても
+
 # `X | None` 等の PEP 604 が def 実行時に評価されないようにする(2026-07-26)。
 # これが無いと py_compile は通るのに実行時 TypeError で即死する。
-
 import argparse
 import datetime as dt
 import json
@@ -43,8 +43,10 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "llama3.2"     # 要約は軽いタスク。gpt-oss:20b(1件66秒)は遅すぎるので高速な小型モデルを使う
 MAX_PER_FEED = 6       # 1フィードあたり見る最新件数
 DEFAULT_SECTION_LIMIT = 4   # `[名前]` に件数指定が無いときのセクション上限
-MAX_TOTAL = 18         # 1回で扱う総件数の上限
-SUMMARY_BUDGET = 240   # 要約に使う秒数の上限。超えた分は原文抜粋にフォールバックする
+MAX_TOTAL = 22         # 1回で扱う総件数の上限。各セクションの上限の合計を下回ると、
+                       # 後ろのセクションが枠切れで痩せる(collect の room 計算)。
+                       # 現行の合計は 5+5+4+3+5=22。フィードを足したらここも上げる
+SUMMARY_BUDGET = 300   # 要約に使う秒数の上限。超えた分は原文抜粋にフォールバックする
 SEEN_TTL_DAYS = 60     # 既読の保持期間。これを過ぎたリンクは忘れる(state の肥大化防止)
 UA = {"User-Agent": "vault-rss/1.0"}
 FETCH_DELAY = 0.7      # フィード間の待ち。Reddit の 429(レート制限)を避ける
@@ -89,7 +91,7 @@ RETRY_BACKOFF = (10, 30)  # 429 のときの待ち。Reddit の .rss は IP 単�
 
 def fetch(url: str) -> bytes | None:
     """429 だけ段階的にリトライする。他のエラーは即あきらめて次のフィードへ。"""
-    for wait in RETRY_BACKOFF + (None,):
+    for wait in (*RETRY_BACKOFF, None):
         try:
             req = urllib.request.Request(url, headers=UA)
             with urllib.request.urlopen(req, timeout=30) as res:
@@ -100,7 +102,7 @@ def fetch(url: str) -> bytes | None:
                 continue
             print(f"  ! 取得失敗 {url}: {e}")
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — ネットワーク層。1フィードの失敗で全体を止めない。必ず1行出力する
             print(f"  ! 取得失敗 {url}: {e}")
             return None
     return None
@@ -189,7 +191,7 @@ def summarize(title: str, summary: str) -> str:
         )
         with urllib.request.urlopen(req, timeout=120) as res:
             out = json.loads(res.read()).get("response", "").strip()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — 要約は落ちても本文で代替する。失敗はノート本文に残るので観測できる
         return f"(要約失敗: {e}) {excerpt(summary)}"
     # 空返しは ollama の不調で普通に起きる。無言の空行を残さずフィードの概要で埋める
     return out.split("\n")[0].strip() or excerpt(summary)
@@ -203,11 +205,12 @@ def load_seen() -> dict[str, str]:
         return {}
     try:
         data = json.loads(SEEN.read_text())
-    except Exception:
+    except (OSError, ValueError):
+        # 壊れた/読めないキャッシュは作り直す。想定外の例外は伝播させる
         return {}
     today = dt.date.today().isoformat()
     if isinstance(data, list):
-        return {link: today for link in data}
+        return dict.fromkeys(data, today)
     return data
 
 
@@ -274,11 +277,13 @@ def render(sections, now) -> str:
     uid = now.strftime("%Y%m%d%H%M%S")
     stamp = f"{now:%Y-%m-%d %H:%M:%S}"
     parts = [
-        f"---\ntitle: RSSダイジェスト {now:%Y-%m-%d}\naliases:\nuid: \"{uid}\"\n"
-        f"created: \"{stamp}\"\nupdated: \"{stamp}\"\n"
-        # タグは空。Inbox に留めて手で取捨選択する(ref/* を付けると Auto Note Mover が Reference へ移す)
-        f"tags:\n---\n# 📰 RSSダイジェスト {now:%Y-%m-%d}\n\n"
-        "ローカル要約。深追いは defuddle で全文クリップ。"
+        (
+            f"---\ntitle: RSSダイジェスト {now:%Y-%m-%d}\naliases:\nuid: \"{uid}\"\n"
+            f"created: \"{stamp}\"\nupdated: \"{stamp}\"\n"
+            # タグは空。Inbox に留めて手で取捨選択する(ref/* を付けると Auto Note Mover が Reference へ移す)
+            f"tags:\n---\n# 📰 RSSダイジェスト {now:%Y-%m-%d}\n\n"
+            "ローカル要約。深追いは defuddle で全文クリップ。"
+        )
     ]
     for section, items in sections:
         parts.append(f"\n## {section}\n")

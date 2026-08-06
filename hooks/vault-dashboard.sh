@@ -75,7 +75,30 @@ else
   nudge_reset "jobs"
 fi
 
-# --- 2. Inbox の滞留 -------------------------------------------------------
+# --- 2. 想起の停滞 ---------------------------------------------------------
+# ここだけは「家事」ではなく本来の目的なので、Inbox より上に置く。
+#
+# 背景(2026-08-04 の実測): Anki に 254 枚あるうち 189 枚(74%)が一度も
+# 学習されておらず、復習待ち 65 枚は全部が期限切れだった。レビューがあった日は
+# 7/13・7/14・7/29・7/30 の4日だけで、7/30 は試験当日。つまり間隔反復は一度も
+# 回っておらず、実態は試験前夜の詰め込みだった。カードを作る側は自動なのに、
+# 思い出す側は Anki.app を自分で開かないと始まらない——Inbox と同じ非対称。
+#
+# 平時 0 になるか: なる。今日 /drill を回せば stale_days=0 で沈黙し、
+# 期限切れが 0 枚でも沈黙する。「溜まっている総量(189枚)」は 0 にならないので
+# 出さない(警報疲れになる)。出すのは「何日ぶりか」だけ。
+study_ok=$(q '.study.available'); study_due=$(q '.study.due'); study_stale=$(q '.study.stale_days')
+: "${study_due:=0}" "${study_stale:=0}"
+if [ "$study_ok" = "true" ] && [ "$study_due" -ge 5 ] && [ "$study_stale" -ge 3 ]; then
+  if nudge_should_emit "study_due" "$study_due" 1 2; then
+    add "🧠 想起カード ${study_due}枚が期限切れ(${study_stale}日ぶり)→ \`/drill\`"
+    nudge_record "study_due" "$study_due"
+  fi
+else
+  nudge_reset "study_due"
+fi
+
+# --- 3. Inbox の滞留 -------------------------------------------------------
 inbox_total=$(q '.inbox.total'); inbox_rss=$(q '.inbox.rss'); triage_days=$(q '.triage_days_ago')
 : "${inbox_total:=0}" "${inbox_rss:=0}" "${triage_days:=0}"
 if [ "$inbox_total" -ge 10 ] || [ "$inbox_rss" -ge 5 ] || [ "$triage_days" -ge 7 ]; then
@@ -87,7 +110,7 @@ else
   nudge_reset "inbox"
 fi
 
-# --- 3. ルート直下の規約外ファイル ------------------------------------------
+# --- 4. ルート直下の規約外ファイル ------------------------------------------
 junk_n=$(printf '%s' "$status" | jq -r '.root_junk | length' 2>/dev/null)
 : "${junk_n:=0}"
 if [ "$junk_n" -ge 1 ]; then
@@ -100,7 +123,7 @@ else
   nudge_reset "root_junk"
 fi
 
-# --- 4. lint 重大 ----------------------------------------------------------
+# --- 5. lint 重大 ----------------------------------------------------------
 # 誤検出を lint-ignore-links で潰して 0 にしてある(2026-07-26)。
 # 0 を保てるからこそ「1以上 = 本物」というシグナルになる。
 crit=$(q '.lint.critical'); : "${crit:=0}"
@@ -113,7 +136,7 @@ else
   nudge_reset "lint_critical"
 fi
 
-# --- 5. 今週の週次ノート(金・土だけ) ---------------------------------------
+# --- 6. 今週の週次ノート(金・土だけ) ---------------------------------------
 # vault-weekly-lazy.sh が自動生成するので通常は出ない。落ちたときの保険。
 dow=$(( $(date +%u) % 7 ))   # 0=日 … 6=土
 if [ "$dow" -ge 5 ] && [ "$(q '.weekly.exists')" = "false" ]; then
@@ -122,6 +145,39 @@ if [ "$dow" -ge 5 ] && [ "$(q '.weekly.exists')" = "false" ]; then
     add "🗓 今週の週次ノート(${wk})が未作成 → \`/weekly-review\`"
     nudge_record "weekly" 1
   fi
+fi
+
+# --- 7. 今日の日誌(最下位。3行の枠から最初に溢れてよい) ---------------------
+# 背景(2026-08-05 の実測): 日誌 28件のうち【1件も】`## 📅 今日の予定` を持って
+# いなかった。日誌そのものは Periodic Notes + Templater が確実に作っているので、
+# 不足しているのは /daily 固有の価値、つまりカレンダー予定の差し込みだけ。
+#
+# なぜフックが日誌を【作らない】か: 作ってしまうと Obsidian 側でテンプレが適用
+# されなくなり、テンプレ末尾の `tp.user.daily_rss()` が二度と走らない。回っている
+# ものを壊す典型なので、ここは知らせるだけに留める(ノートは触らない)。
+#
+# 平時 0 になるか:
+#   - 未作成の行 … Obsidian を開いた日は出ない(直近20日で5日だけ該当)
+#   - 予定未挿入の行 … 毎日該当しうるので min_days=3 に緩めてある(3日に1回まで)。
+#     それでも鳴りすぎると感じたらこの節ごと消してよい。
+# キャッシュ(.vault-status.json)を経由せず直接見る。日付が変われば判定も変わるので、
+# 10分の TTL でも古い答えを掴みうるため。ファイル1つの stat と grep なので十分速い。
+today_diary="$VAULT/daily/diary/$(date +%F).md"
+if [ ! -f "$today_diary" ]; then
+  nudge_reset "daily_cal"
+  if nudge_should_emit "daily_missing" 1 1 1; then
+    add "📔 今日の日誌が未作成 → \`/daily\`"
+    nudge_record "daily_missing" 1
+  fi
+elif ! grep -q '📅 今日の予定' "$today_diary" 2>/dev/null; then
+  nudge_reset "daily_missing"
+  if nudge_should_emit "daily_cal" 1 1 3; then
+    add "📅 今日の日誌にカレンダー予定が未挿入 → \`/daily\`"
+    nudge_record "daily_cal" 1
+  fi
+else
+  nudge_reset "daily_missing"
+  nudge_reset "daily_cal"
 fi
 
 # --- 出力 -------------------------------------------------------------------

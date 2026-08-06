@@ -19,9 +19,9 @@
 """
 
 from __future__ import annotations  # 3.9 の /usr/bin/python3 で実行されても
+
 # `X | None` 等の PEP 604 が def 実行時に評価されないようにする(2026-07-26)。
 # これが無いと py_compile は通るのに実行時 TypeError で即死する。
-
 import argparse
 import datetime as dt
 import hashlib
@@ -310,7 +310,7 @@ def _ask_llm(title: str, body: str, retries: int = 3) -> list[tuple[str, str]]:
         for attempt in range(retries):
             try:
                 resp = _ask_one(prompt, attempt)
-            except Exception as e:  # 1チャンクの失敗でノート全体を捨てない
+            except Exception as e:  # noqa: BLE001 — 1チャンクの失敗でノート全体を捨てない。直後に stderr へ出す
                 print(f"      ! {type(e).__name__} — このチャンクを飛ばす", file=sys.stderr)
                 break
             if cards := _parse_qa(resp):
@@ -343,7 +343,7 @@ def llm_cards(path: Path, fm: dict, body: str, title: str) -> list[tuple[str, st
     print(f"    (LLM生成中… {path.name})", file=sys.stderr)
     try:
         cards = _ask_llm(title, clean)
-    except Exception as e:  # タイムアウト等。1ノートの失敗で全体を殺さない
+    except Exception as e:  # noqa: BLE001 — タイムアウト等。1ノートの失敗で全体を殺さない。直後に stderr へ出す
         print(f"    ! LLM失敗({type(e).__name__}): {path.name} — スキップ(キャッシュせず次回再試行)",
               file=sys.stderr)
         return []

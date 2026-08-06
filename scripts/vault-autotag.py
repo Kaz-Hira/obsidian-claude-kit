@@ -13,13 +13,12 @@ gpt-oss:20b(ローカル)に本文を渡し、**Vault に実在するタグの�
 """
 
 from __future__ import annotations  # 3.9 の /usr/bin/python3 で実行されても
+
 # `X | None` 等の PEP 604 が def 実行時に評価されないようにする(2026-07-26)。
 # これが無いと py_compile は通るのに実行時 TypeError で即死する。
-
 import argparse
 import json
 import re
-import subprocess
 import sys
 import urllib.request
 from pathlib import Path
